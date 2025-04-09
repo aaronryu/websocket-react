@@ -1,13 +1,15 @@
 // import Stomp from "../libraries/stomp.umd.min.js";
-importScripts("https://cdn.jsdelivr.net/npm/@stomp/stompjs@6.1.2/bundles/stomp.umd.min.js");
+importScripts(
+  "https://cdn.jsdelivr.net/npm/@stomp/stompjs@6.1.2/bundles/stomp.umd.min.js"
+);
 
 const STORE_ID = "2dhdj1we";
 
-function createStompClient({ debug = false, type }) {
+function createStompClient({ debug = false, type, subscriptions = [] }) {
   const stompClient = new StompJs.Client({
     brokerURL: "ws://localhost:8080/ws",
     connectHeaders: {
-      'accept-version': '1.2,1.1,1.0',
+      "accept-version": "1.2,1.1,1.0",
       // 'heart-beat': '4000,4000',
       "x-client-id": `${STORE_ID}-${type}`, // 8h12eh-t0
     },
@@ -21,9 +23,16 @@ function createStompClient({ debug = false, type }) {
 
     onConnect: () => {
       console.log("Connected to WebSocket");
-      stompClient.subscribe("/topic/greetings", (response) => {
-        console.log("Received message:", response.body);
-        setMessage(JSON.parse(response.body).content);
+      subscriptions.forEach((subscription) => {
+        stompClient.subscribe(subscription.topic, (response) => {
+          if (debug) {
+            console.log(
+              `Received message - topic: ${subscription.topic}, message: ` +
+                response.body
+            );
+          }
+          subscription.callback(JSON.parse(response.body));
+        });
       });
     },
     onStompError: (frame) => {
