@@ -1,9 +1,8 @@
-import { StompSubscription } from "./../../node_modules/@stomp/stompjs/esm6/stomp-subscription.d";
 import { PageType } from "../pages/types";
 
 type StompSubscription = {
   topic: string;
-  callback: (message: any) => void;
+  // callback: (message: any) => void;
 };
 
 export const register = async ({
@@ -21,6 +20,12 @@ export const register = async ({
       );
       if (registration.installing) {
         console.log(`Service worker installing - page-type: ${type}`);
+        // subscriptions.forEach(async (subscription) => {
+        //   await subscribe(type, subscription);
+        //   console.log(
+        //     `Callback registering - page-type: ${type}, topic: ${subscription.topic}`
+        //   );
+        // });
       } else if (registration.waiting) {
         console.log(`Service worker installed - page-type: ${type}`);
       } else if (registration.active) {
@@ -50,6 +55,32 @@ export const getRegistration = async (type: PageType) => {
   );
 };
 
+export const subscribe = async (type: PageType, payload: StompSubscription) => {
+  await postMessage(type, {
+    type: "SUBSCRIBE",
+    payload: {
+      topic: payload.topic,
+      // callback: payload.callback,
+    },
+  });
+};
+
+export const publish = async (
+  type: PageType,
+  payload: [
+    {
+      target: PageType;
+      to: string; // TODO - 모든 경로들에 대해 Enum 같은것으로 저장해두는것이 어떨까? React Router 설정도 JSON 으로 하는게 좋아보인다.
+      desc: string;
+    }
+  ]
+) => {
+  await postMessage(type, {
+    type: "ROUTING",
+    payload: payload,
+  });
+};
+
 export const postMessage = async (
   type: PageType,
   message: {
@@ -62,6 +93,7 @@ export const postMessage = async (
     console.error(`No active service worker found for page-type: ${type}`);
     return;
   }
+  console.log(message);
   registration?.active?.postMessage(message);
   console.log(`Message sent to service worker for page-type: ${type}`, message);
 };

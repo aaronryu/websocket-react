@@ -1,5 +1,11 @@
 import { Outlet } from "react-router-dom";
-import { postMessage, register, unregister } from "../service-worker/register";
+import {
+  postMessage,
+  publish,
+  register,
+  subscribe,
+  unregister,
+} from "../service-worker/entrypoint";
 import { PageType } from "../pages/types";
 
 export default function ScreenTwoLayout() {
@@ -12,6 +18,8 @@ export default function ScreenTwoLayout() {
           // 메시지 처리
         } else if (type === "PONG") {
           console.log("SW 응답:", payload.text);
+        } else if (type === "ROUTES") {
+          console.log("나보고 여기로 이동하래요 :", payload);
         }
       }
     });
@@ -24,6 +32,26 @@ export default function ScreenTwoLayout() {
     });
   }
 
+  async function initSubscribe() {
+    await subscribe(PageType.S2, {
+      topic: "/s2/routing",
+      // callback: callbackRef,
+      // (message) => {
+      //   console.log("dedededadsds");
+      // },
+    });
+  }
+
+  async function routing() {
+    await publish(PageType.S2, [
+      {
+        target: PageType.S1,
+        to: "/s1/test",
+        desc: "S1 페이지를 /s1/test 로 이동시키자",
+      },
+    ]);
+  }
+
   return (
     <>
       <h1>S2 Layout</h1>
@@ -31,6 +59,8 @@ export default function ScreenTwoLayout() {
       <button onClick={() => sendMessageToServiceWorker()}>
         Send Message to Service Worker
       </button>
+      <button onClick={initSubscribe}>Subscribe</button>
+      <button onClick={routing}>S1 페이지를 이동시키기</button>
       <button onClick={() => unregister()}>Unregister</button>
       <Outlet />
     </>

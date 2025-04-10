@@ -25,4 +25,24 @@ self.addEventListener("message", (event) => {
       payload: { text: "(S2) Hello back from Service Worker!" },
     });
   }
+  if (type === "SUBSCRIBE") {
+    // 클라이언트에게 응답 보내기
+    client.subscribe(payload.topic, (message) => {
+      console.log("[S2] Received message:", message);
+      event.source?.postMessage({
+        type: "ROUTES",
+        payload: { to: message.body.to, desc: message.body.desc },
+      });
+    });
+  }
+  if (type === "ROUTING") {
+    console.log(payload);
+    payload.forEach((each) => {
+      const topic = `/${each.target}/routing`;
+      client.publish(topic, {
+        to: payload.to,
+        desc: payload.desc,
+      });
+    });
+  }
 });

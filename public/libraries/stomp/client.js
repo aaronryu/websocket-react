@@ -24,15 +24,7 @@ function createStompClient({ debug = false, type, subscriptions = [] }) {
     onConnect: () => {
       console.log("Connected to WebSocket");
       subscriptions.forEach((subscription) => {
-        stompClient.subscribe(subscription.topic, (response) => {
-          if (debug) {
-            console.log(
-              `Received message - topic: ${subscription.topic}, message: ` +
-                response.body
-            );
-          }
-          subscription.callback(JSON.parse(response.body));
-        });
+        subscribe(subscription.topic, subscription.callback);
       });
     },
     onStompError: (frame) => {
@@ -47,24 +39,31 @@ function createStompClient({ debug = false, type, subscriptions = [] }) {
   const disconnect = () => {
     stompClient.deactivate();
   };
-  const sendMessage = (message) => {
-    stompClient.publish({
-      destination: "/app/hello",
-      body: JSON.stringify({ name: message }),
+  const subscribe = (topic, callback) => {
+    stompClient.subscribe(topic, (response) => {
+      if (debug) {
+        console.log(`Received message - topic: ${topic}, message: ` + response);
+      }
+      callback(JSON.parse(response.body));
     });
   };
-  const setMessage = (message) => {
-    console.log("Message received: ", message);
-    // setState({ message });
-    // setTimeout(() => {
-    //   setState({ message: "" });
-    // }, 3000);
+  const unsubscribe = (topic) => {
+    stompClient.unsubscribe(topic);
+  };
+
+  const publish = (topic, payload) => {
+    stompClient.publish({
+      destination: "/pub" + topic,
+      body: JSON.stringify(payload),
+    });
   };
 
   return {
     // stompClient,
     connect,
     disconnect,
-    sendMessage,
+    subscribe,
+    unsubscribe,
+    publish,
   };
 }

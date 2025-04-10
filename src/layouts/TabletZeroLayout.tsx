@@ -1,5 +1,5 @@
 import { Outlet } from "react-router-dom";
-import { register, unregister } from "../service-worker/register";
+import { register, unregister } from "../service-worker/entrypoint";
 import { PageType } from "../pages/types";
 
 export default function TabletZeroLayout() {
