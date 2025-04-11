@@ -1,109 +1,139 @@
+import { useEffect } from "react";
 import { PageType } from "../pages/types";
 
-type StompSubscription = {
-  topic: string;
-  // callback: (message: any) => void;
-};
+enum BroadcastChannelContextType {
+  WINDOW_CLIENT = "window-client",
+  SERVICE_WORKER = "service-worker",
+}
 
-export const register = async ({
-  type,
-  subscriptions = [],
-}: {
-  type: PageType;
-  subscriptions?: StompSubscription[];
-}) => {
+enum BroadcastChannelClient {
+  INSTALLED = "INSTALLED",
+  SUBSCRIBE = "SUBSCRIBE",
+  PUBLISH = "PUBLISH",
+  RECEIVE = "RECEIVE",
+}
+
+interface BroadcastChannelSubscribe {
+  from: BroadcastChannelContextType.WINDOW_CLIENT;
+  type: BroadcastChannelClient;
+  page: PageType;
+}
+
+interface Route {
+  to: string;
+  desc?: string;
+}
+
+interface RouteRequest extends Route {
+  target: PageType;
+}
+
+interface BroadcastChannelPublish {
+  from: BroadcastChannelContextType.WINDOW_CLIENT;
+  type: BroadcastChannelClient;
+  page: PageType;
+  payload: RouteRequest[];
+}
+
+interface BroadcastChannelReceive {
+  from: BroadcastChannelContextType.SERVICE_WORKER;
+  type: BroadcastChannelClient;
+  page?: PageType;
+  payload?: Route;
+}
+
+/**
+ * Service Worker 와 WindowClient 간의 통신을 위한 BroadcastChannel 을 사용
+ * 
+ * - production  : 단일 BroadcastChannel Context = 단일 WindowClient
+ * - development : 다수 BroadcastChannel Context = 다수 WindowClient (4개의 탭)
+ *  - 각각의 탭마다 따로 BroadcastChannel 만들지 않고, 단일 BroadcastChannel 을 사용한다.
+ *  - 단일 BroadcastChannel 을 사용하면, 각 탭에서 발생하는 이벤트를 모두 수신하기 때문에 if 문이 조금 많음
+ */
+export default function useStompServiceWorker(
+  currentPage: PageType,
+  navigate: (to: string) => void
+) {
+  const registration = registerServiceWorker(currentPage);
+  const BROADCAST_CHANNEL = new BroadcastChannel(
+    "between-window-client-and-service-worker"
+  );
+
+  // 현재의 PageType 에 대한 STOMP Client 를 등록한다 = 현재의 PageType 에 대한 Subscribe 등록
+  const subscribe = () => {
+    const subscribe: BroadcastChannelSubscribe = {
+      from: BroadcastChannelContextType.WINDOW_CLIENT,
+      type: BroadcastChannelClient.SUBSCRIBE,
+      page: currentPage,
+    };
+    BROADCAST_CHANNEL.postMessage(subscribe);
+  }
+
+  useEffect(() => {
+    // B.2. Service Worker 가 이미 등록이 되어있을지 모르니 "매 페이지 로드마다", 현재의 PageType 에 대한 STOMP Client = Subscribe 를 등록한다
+    subscribe();
+    // A. React Routing 을 위한 메세지 리시버 (메세지 핸들러의 반복된 재등록을 방지해야한다)
+    BROADCAST_CHANNEL.onmessage = (event) => {
+      const receive = event.data as BroadcastChannelReceive;
+      const from = receive.from;
+      const type = receive.type;
+      const receivedPage = receive.page;
+      if (from === BroadcastChannelContextType.SERVICE_WORKER) {
+        switch (type) {
+          // B.1. "Service Worker 가 등록이 완료되었을때", 현재의 PageType 에 대한 STOMP Client = Subscribe 를 등록한다
+          case BroadcastChannelClient.INSTALLED:
+            subscribe();
+            break;
+          case BroadcastChannelClient.RECEIVE:
+            const route: Route = receive.payload!;
+            if (receivedPage === currentPage) {
+              navigate(route.to);
+            }
+            break;
+          default:
+            console.error(
+              `[BROADCAST_CHANNEL in WINDOW_CLIENT] Unknown message type: ${type}, from: ${from}, payload: ${event.data.payload}`
+            );
+            break;
+        }
+      }
+    };
+    return () => {
+      BROADCAST_CHANNEL.close();
+    };
+  }, []);
+
+  return {
+    routing: (request: RouteRequest[]) => {
+      const routes: BroadcastChannelPublish = {
+        from: BroadcastChannelContextType.WINDOW_CLIENT,
+        type: BroadcastChannelClient.PUBLISH,
+        page: currentPage,
+        payload: request,
+      };
+      BROADCAST_CHANNEL.postMessage(routes);
+    },
+  };
+}
+
+const registerServiceWorker = async (page: PageType) => {
   if ("serviceWorker" in navigator) {
     try {
       const registration = await navigator.serviceWorker.register(
-        `./${type}/worker.js`
-        // { scope: `/${type}/` }
+        `${window.location.origin}/libraries/stomp/worker.js`,
       );
       if (registration.installing) {
-        console.log(`Service worker installing - page-type: ${type}`);
-        // subscriptions.forEach(async (subscription) => {
-        //   await subscribe(type, subscription);
-        //   console.log(
-        //     `Callback registering - page-type: ${type}, topic: ${subscription.topic}`
-        //   );
-        // });
+        console.log(
+          `[WINDOW_CLIENT] Service worker installing - page: ${page}`
+        );
       } else if (registration.waiting) {
-        console.log(`Service worker installed - page-type: ${type}`);
+        console.log(`[WINDOW_CLIENT] Service worker installed - page: ${page}`);
       } else if (registration.active) {
-        console.log(`Service worker active - page-type: ${type}`);
+        console.log(`[WINDOW_CLIENT] Service worker active - page: ${page}`);
       }
       return registration;
     } catch (error) {
-      console.error(`Registration failed with ${error}`);
-    }
-  }
-};
-
-export const getRegistrations = async () => {
-  const registrations = [];
-  if ("serviceWorker" in navigator) {
-    const retreived = await navigator.serviceWorker.getRegistrations();
-    registrations.push(...retreived);
-    // console.log(registrations);
-  }
-  return registrations;
-};
-
-export const getRegistration = async (type: PageType) => {
-  const registrations = await getRegistrations();
-  return registrations.find((registration) =>
-    registration.active?.scriptURL.includes(type)
-  );
-};
-
-export const subscribe = async (type: PageType, payload: StompSubscription) => {
-  await postMessage(type, {
-    type: "SUBSCRIBE",
-    payload: {
-      topic: payload.topic,
-      // callback: payload.callback,
-    },
-  });
-};
-
-export const publish = async (
-  type: PageType,
-  payload: [
-    {
-      target: PageType;
-      to: string; // TODO - 모든 경로들에 대해 Enum 같은것으로 저장해두는것이 어떨까? React Router 설정도 JSON 으로 하는게 좋아보인다.
-      desc: string;
-    }
-  ]
-) => {
-  await postMessage(type, {
-    type: "ROUTING",
-    payload: payload,
-  });
-};
-
-export const postMessage = async (
-  type: PageType,
-  message: {
-    type: string;
-    payload?: any;
-  }
-) => {
-  const registration = await getRegistration(type);
-  if (!registration) {
-    console.error(`No active service worker found for page-type: ${type}`);
-    return;
-  }
-  console.log(message);
-  registration?.active?.postMessage(message);
-  console.log(`Message sent to service worker for page-type: ${type}`, message);
-};
-
-export const unregister = async () => {
-  if ("serviceWorker" in navigator) {
-    const registrations = await getRegistrations();
-    for (const registration of registrations) {
-      await registration.unregister();
-      console.log("Service worker unregistered");
+      console.error(`[WINDOW_CLIENT] Registration failed with ${error}`);
     }
   }
 };
