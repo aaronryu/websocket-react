@@ -19,45 +19,40 @@ interface BroadcastChannelSubscribe {
   page: PageType;
 }
 
-interface Route {
-  to: string;
-  desc?: string;
-}
-
-interface RouteRequest extends Route {
-  target: PageType;
-}
-
-interface BroadcastChannelPublish {
+export interface BroadcastChannelPublish {
   from: BroadcastChannelContextType.WINDOW_CLIENT;
   type: BroadcastChannelClient;
   page: PageType;
-  payload: RouteRequest[];
+  payload: any; // RouteRequest[];
 }
 
 interface BroadcastChannelReceive {
   from: BroadcastChannelContextType.SERVICE_WORKER;
   type: BroadcastChannelClient;
   page?: PageType;
-  payload?: Route;
+  payload?: any; // Route;
+}
+
+export enum BroadcastChannelType {
+  CHANNEL_FOR_ROUTING = "routing-between-window-client-and-service-worker",
+  CHANNEL_FOR_SYNCING = "syncing-between-window-client-and-service-worker",
 }
 
 /**
  * Service Worker 와 WindowClient 간의 통신을 위한 BroadcastChannel 을 사용
- * 
+ *
  * - production  : 단일 BroadcastChannel Context = 단일 WindowClient
  * - development : 다수 BroadcastChannel Context = 다수 WindowClient (4개의 탭)
  *  - 각각의 탭마다 따로 BroadcastChannel 만들지 않고, 단일 BroadcastChannel 을 사용한다.
  *  - 단일 BroadcastChannel 을 사용하면, 각 탭에서 발생하는 이벤트를 모두 수신하기 때문에 if 문이 조금 많음
  */
 export default function useStompServiceWorker(
+  channel: BroadcastChannelType,
   currentPage: PageType,
-  navigate: (to: string) => void
+  receiveCallback: (payload: any) => void,
 ) {
   const registration = registerServiceWorker(currentPage);
-  const BROADCAST_CHANNEL = new BroadcastChannel(
-    "between-window-client-and-service-worker"
-  );
+  const BROADCAST_CHANNEL = new BroadcastChannel(channel);
 
   // 현재의 PageType 에 대한 STOMP Client 를 등록한다 = 현재의 PageType 에 대한 Subscribe 등록
   const subscribe = () => {
@@ -67,7 +62,7 @@ export default function useStompServiceWorker(
       page: currentPage,
     };
     BROADCAST_CHANNEL.postMessage(subscribe);
-  }
+  };
 
   useEffect(() => {
     // B.2. Service Worker 가 이미 등록이 되어있을지 모르니 "매 페이지 로드마다", 현재의 PageType 에 대한 STOMP Client = Subscribe 를 등록한다
@@ -85,9 +80,8 @@ export default function useStompServiceWorker(
             subscribe();
             break;
           case BroadcastChannelClient.RECEIVE:
-            const route: Route = receive.payload!;
             if (receivedPage === currentPage) {
-              navigate(route.to);
+              receiveCallback(receive.payload);
             }
             break;
           default:
@@ -104,14 +98,14 @@ export default function useStompServiceWorker(
   }, []);
 
   return {
-    routing: (request: RouteRequest[]) => {
-      const routes: BroadcastChannelPublish = {
+    publish: (payload: any) => {
+      const request: BroadcastChannelPublish = {
         from: BroadcastChannelContextType.WINDOW_CLIENT,
         type: BroadcastChannelClient.PUBLISH,
         page: currentPage,
-        payload: request,
+        payload,
       };
-      BROADCAST_CHANNEL.postMessage(routes);
+      BROADCAST_CHANNEL.postMessage(request);
     },
   };
 }
@@ -120,7 +114,7 @@ const registerServiceWorker = async (page: PageType) => {
   if ("serviceWorker" in navigator) {
     try {
       const registration = await navigator.serviceWorker.register(
-        `${window.location.origin}/libraries/stomp/worker.js`,
+        `${window.location.origin}/libraries/stomp/worker.js`
       );
       if (registration.installing) {
         console.log(

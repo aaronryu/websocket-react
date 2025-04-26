@@ -1,10 +1,12 @@
 import { Outlet, useNavigate } from "react-router-dom";
-import useStompServiceWorker from "../service-worker/entrypoint";
 import { PageType } from "../pages/types";
+import useRemoteRouter from "../service-worker/routing";
+import { HttpMethod, useQuery } from "../storage/entrypoint";
+import { RevalidateTag } from "./ScreenOneLayout";
 
 export default function ScreenTwoLayout() {
   const navigate = useNavigate();
-  const { routing } = useStompServiceWorker(PageType.S2, navigate);
+  const { routing } = useRemoteRouter(PageType.S2, navigate);
 
   async function handleRouting(to: string) {
     await routing([
@@ -15,6 +17,11 @@ export default function ScreenTwoLayout() {
       },
     ]);
   }
+  const { data: users, isLoading } = useQuery({
+    tag: RevalidateTag.USER_TAG,
+    method: HttpMethod.GET,
+    url: "http://localhost:8080/api/users",
+  });
 
   return (
     <>
@@ -24,6 +31,15 @@ export default function ScreenTwoLayout() {
       <button onClick={() => handleRouting("/s1/test")}>
         {"S1 -> /s1/test"}
       </button>
+      <div>
+        {users?.map((user: any) => (
+          <div key={user.id}>
+            <div>{user.id}</div>
+            <div>{user.name}</div>
+            <div>{user.phoneNumber}</div>
+          </div>
+        ))}
+      </div>
       <Outlet />
     </>
   );

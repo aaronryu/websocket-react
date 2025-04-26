@@ -3,11 +3,7 @@ importScripts("https://cdn.jsdelivr.net/npm/@stomp/stompjs@6.1.2/bundles/stomp.u
 
 const STORE_ID = "2dhdj1we";
 
-function createStompClient(page, callback, debug = false) {
-  const topics = [
-    `/${page}/routing`,
-  ]
-
+function createStompClient(page, topics, debug = false) {
   const stompClient = new StompJs.Client({
     brokerURL: "ws://localhost:8080/ws",
     connectHeaders: {
@@ -25,8 +21,8 @@ function createStompClient(page, callback, debug = false) {
 
     onConnect: () => {
       console.log("[STOMP in SERVICE_WORKER] Connected to WebSocket");  
-      topics.forEach((topic) => {
-        subscribe(topic, callback);
+      topics.forEach((each) => {
+        subscribe(each.topic, each.callback);
       });
     },
     onStompError: (frame) => {
