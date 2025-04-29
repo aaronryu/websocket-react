@@ -24,7 +24,8 @@ export default function useRemoteRouter(
 
   return {
     routing: (routes: RouteRequest[]/* Publish Payload 타입으로 명시해주어야한다. */) => {
-      publish(routes);
+      // PageType.THIS 인 경우 현재 currentPage 대입하도록 한번 수정
+      publish(routes.map((route) => ({...route, target: route.target === PageType.THIS ? currentPage : route.target })));
     },
   };
 }
